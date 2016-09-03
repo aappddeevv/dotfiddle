@@ -45,10 +45,6 @@ EclipseKeys.createSrc := EclipseCreateSrc.Default + EclipseCreateSrc.Resource
 
 EclipseKeys.withSource := true
 
-packSettings
-
-packMain := Map("dotfiddle" -> "dot.main")
-
 fork in run := true
 
 javaOptions in run ++= Seq("-Xmx4G","-Djdk.gtk.version=3")

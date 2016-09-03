@@ -50,9 +50,27 @@ case class DotFiddleState(graphProps: Seq[AnOption] = Seq(), edgeProps: Seq[AnOp
   extraArgs: Option[String] = None,
   scale: Option[Double] = Option(1.0))
 
+case class Config(help: Boolean = false,
+  dotCommand: String = "dot -Tsvg")
+
 object Main {
 
+  val parser = new scopt.OptionParser[Config]("dotfiddle") {
+    override def showUsageOnError = true
+    head("dotfiddle", "0.1.0")
+    opt[String]("dotcommand").text("""Set the base command used to render graphics. Default is "dot -Tsvg"""")
+      .action((x, c) => c.copy(dotCommand = x))
+    help("help").text("Show help.")
+  }
+
+  var config: Config = _
+
   def main(args: Array[String]): Unit = {
+
+    config = parser.parse(args, Config()) match {
+      case Some(c) => c
+      case _ => return
+    }
     javafx.application.Application.launch(classOf[DotFiddle], args: _*)
   }
 
@@ -156,7 +174,7 @@ class DotFiddle extends javafx.application.Application {
     import java.nio.charset.StandardCharsets
     import scala.util.control.Exception._
 
-    val command = "dot -Tsvg "
+    val dotCommand = "dot -Tsvg"
     val inputFile = Files.createTempFile("dotfiddle", ".gv")
     val outputFile = Files.createTempFile("dotfiddle", ".svg")
     val extraArgs = new scalafx.beans.property.StringProperty()
@@ -172,6 +190,10 @@ class DotFiddle extends javafx.application.Application {
     }
 
     def shutdown(): Unit = {
+      clean()
+    }
+
+    protected def clean(): Unit = {
       nonFatalCatch apply { // do nothing if error
         Files.deleteIfExists(inputFile)
         Files.deleteIfExists(outputFile)
@@ -184,15 +206,14 @@ class DotFiddle extends javafx.application.Application {
     def run(source: String): Unit = {
       val cleanedUp = catchTempFileMgmtError apply {
         Files.write(inputFile, source.getBytes(StandardCharsets.UTF_8))
-        val ofile = outputFile
-        if (Files.exists(ofile)) Files.delete(ofile)
+        Files.deleteIfExists(outputFile)
         true
       }
 
       if (cleanedUp) {
         val stdout = new StringBuilder
         val stderr = new StringBuilder
-        val commandToRun = command + opts() + s" -o$outputFile " + s" $inputFile"
+        val commandToRun = dotCommand + " " + opts() + s" -o$outputFile " + s" $inputFile"
         addMessages(s"Rendering command:\n$commandToRun")
         val ecode = commandToRun ! ProcessLogger(stdout append _, stderr append _)
         if (ecode != 0) {
@@ -211,26 +232,31 @@ class DotFiddle extends javafx.application.Application {
       }
     }
   }
-  val runner = new DotRunner() {}
+  val runner = new DotRunner() {
+    override val dotCommand = Main.config.dotCommand
+
+  }
 
   /** Render the dot source into an image to display. */
   def render(): Unit = {
     val source = getDotSource().trim
-    Platform.runLater {
-      runner.run(source)
-    }
+    runner.run(source)
   }
 
   /**
    * Reload the SVG file that is output from graphviz rendering.
    */
   def reload(svg: Option[Path] = None): Unit = {
-    svg.foreach { f =>
-      addMessages(s"Loading SVG: ${f.toAbsolutePath.toString}")
-      Platform.runLater {
-        val eng = svgView.getEngine()
-        eng.load("file:///" + f.toAbsolutePath.toString)
-      }
+    svg match {
+      case Some(f) if (Files.exists(f) && Files.size(f) > 0) =>
+        addMessages(s"Loading SVG: ${f.toAbsolutePath.toString}")
+        Platform.runLater {
+          val eng = svgView.getEngine()
+          eng.load("file:///" + f.toAbsolutePath.toString)
+        }
+      case _ =>
+        val eng = svgView.getEngine
+        eng.loadContent("<p>No graph to render.</p>")
     }
   }
 
@@ -377,7 +403,7 @@ class DotFiddle extends javafx.application.Application {
 
   import scalafx.scene.control.TabPane._
   import scalafx.geometry._
-  val inputs = new TabPane {    
+  val inputs = new TabPane {
     id = "defaults-pane"
     tabClosingPolicy = TabClosingPolicy.Unavailable
     side = Side.Top
@@ -413,11 +439,17 @@ class DotFiddle extends javafx.application.Application {
 
   val commandCenter = new VBox {
     spacing = 10
-    children addAll (sview, extraArgsView, inputs)
+    children addAll (extraArgsView, inputs)
   }
 
   val splitter = new SplitPane {
-    items ++= Seq(commandCenter, zoomer, editor)
+    items ++= Seq(
+        commandCenter, 
+        new VBox { 
+          spacing = 10
+          children ++= Seq(sview, zoomer)
+        }: Node,
+        editor)
     dividerPositions_=(0.20, 0.70)
   }
 
@@ -478,12 +510,12 @@ class DotFiddle extends javafx.application.Application {
   /**
    * Snapshot core set of user elements.
    */
-//    def snapshot(): DotFiddle = {
-//      DotFiddleState(ggrid.toSeq, egrid.toSeq, ngrid.toSeq,
-//        source = Some(editor.getDocument.getText),
-//        extraArgs = Some(extraArgs.text.get()),
-//        image = dotSource, scale = Some(slider.value()))
-//    }
+  //    def snapshot(): DotFiddle = {
+  //      DotFiddleState(ggrid.toSeq, egrid.toSeq, ngrid.toSeq,
+  //        source = Some(editor.getDocument.getText),
+  //        extraArgs = Some(extraArgs.text.get()),
+  //        image = dotSource, scale = Some(slider.value()))
+  //    }
 
   val scene = new Scene(1020, 700) {
     root = new BorderPane {
