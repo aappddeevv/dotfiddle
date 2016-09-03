@@ -13,3 +13,6 @@ another program.
 
 dotfiddle curretly lacks polish and various features but it is good
 enough to refine the look of a graph quickly.
+
+Run `sbt stage` to generate a package you can run or 
+`sbt universal:packageBin` to generate a distributable zip file.
