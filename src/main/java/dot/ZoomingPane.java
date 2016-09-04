@@ -14,6 +14,8 @@ import javafx.scene.layout.Pane;
 import javafx.scene.transform.Scale;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
+import javafx.scene.input.*;
+import javafx.event.*;
 
 /**
  * See: http://johnthecodingarchitect.blogspot.com/2013/11/scaling-vs-zooming-in-javafx.html
@@ -36,6 +38,13 @@ class ZoomingPane extends Pane {
                     requestLayout();
                 }
             });
+	setOnZoom(new EventHandler<ZoomEvent>() { 
+	   @Override public void handle(ZoomEvent event) {
+	       //System.out.println("zoom event: " + event.getZoomFactor());
+	       zoomFactor.setValue(zoomFactor.getValue() * event.getZoomFactor());
+	       event.consume();
+	   }
+	});
     }
 
     protected void layoutChildren() {

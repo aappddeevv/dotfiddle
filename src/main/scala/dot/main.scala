@@ -300,14 +300,71 @@ c -- d
   import org.fxmisc.richtext._
   import org.fxmisc.flowless._
 
-  val editor = new CodeArea()
-  editor.setParagraphGraphicFactory(LineNumberFactory.get(editor))
+  /**
+   * Editor view with a builtin search highlighting box.
+   */
+  class EditorView() extends javafx.scene.layout.VBox() {
+    val editor = new InlineCssTextArea()
+    editor.setWrapText(true)
+    editor.setParagraphGraphicFactory(LineNumberFactory.get(editor))
+    val spane = new VirtualizedScrollPane[InlineCssTextArea](editor)
+    val search = new TextField()
+    setSpacing(10)
+    VBox.setVgrow(spane, Priority.Always)
+    getChildren() ++= List(
+      new HBox {
+        spacing = 5
+        children ++= List(new Label("Search Regex:"), search, new Button("Reapply") {
+          onAction = { ae => reapplySearchHighlighting() }
+        }: Node, new Button("Clear") {
+          onAction = { ae => search.text = "" }
+        }: Node)
+      }: Node,
+      spane)
+
+    // When return pressed in searchbox, do the highlighting. */
+    search.textProperty().onChange {
+      reapplySearchHighlighting()
+    }
+
+    // Reapply highlighting as you type...very expensive.
+    search.onKeyPressed = { _ =>
+      reapplySearchHighlighting()
+    }
+
+    def getText() = editor.getDocument.getText
+
+    def setText(source: String) = {
+      editor.replaceText(0, editor.getLength, source)
+      highlightUsing(search.text())
+    }
+
+    /** Clear all style sthen apply styles based on regex. */
+    def highlightUsing(regex: String): Unit = {
+      editor.clearStyle(0, editor.getLength)
+      nonFatalCatch withApply { f =>
+        addMessages(s"Invalid regex: $regex")
+      } apply {
+        regex.r.findAllMatchIn(getText()).foreach { m =>
+          editor.setStyle(m.start, m.end, "-fx-fill: red")
+        }
+      }
+    }
+
+    /** Reapply highlighting to the entire document based on the current search box. */
+    def reapplySearchHighlighting(): Unit = {
+      if (search.text().trim.length > 0)
+        highlightUsing(search.text())
+    }
+  }
+
+  val editorPane = new EditorView()
 
   /** Get the dot source from the text editor. Should never return null. */
-  def getDotSource(): String = editor.getDocument.getText
+  def getDotSource(): String = editorPane.getText()
 
   /** Set the editor's dot source from the string. */
-  def setDotSource(source: String) = editor.replaceText(0, editor.getLength, source)
+  def setDotSource(source: String) = editorPane.setText(source)
 
   val (slider, sview) = {
     val slider = new Slider(0.1, 5, 0.25) { blockIncrement = 0.25f }
@@ -464,6 +521,7 @@ c -- d
 
   val commandCenter = new VBox {
     spacing = 10
+    VBox.setVgrow(inputs, Priority.Always)
     children addAll (extraArgsView, inputs)
   }
 
@@ -472,9 +530,10 @@ c -- d
       commandCenter,
       new VBox {
         spacing = 10
+        VBox.setVgrow(zoomer, Priority.Always)
         children ++= Seq(sview, zoomer)
       }: Node,
-      editor)
+      editorPane)
     dividerPositions_=(0.20, 0.70)
   }
 
