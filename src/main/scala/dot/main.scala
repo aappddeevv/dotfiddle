@@ -23,7 +23,8 @@ import scala.util.control.Exception._
 import java.io._
 
 /**
- * A graphviz option.
+ * A graphviz option. These get translated to command line parameters
+ * that override those in the graph file.
  *
  *  @param key The key of the option.
  *  @param value The value of the option
@@ -50,7 +51,8 @@ case class DotFiddleState(graphProps: Seq[AnOption] = Seq(), edgeProps: Seq[AnOp
   extraArgs: Option[String] = None,
   scale: Option[Double] = Option(1.0))
 
-case class Config(help: Boolean = false,
+case class Config(
+  help: Boolean = false,
   dotCommand: String = "dot -Tsvg")
 
 object Main {
@@ -442,7 +444,6 @@ c -- d
   val ngrid = ntb.getItems
   val etb = makeTable()
   val egrid = etb.getItems
-  //ggrid += new AnOption("layout", "fdp", true)
 
   /**
    * From the key-value pairs in the graph, node and edge property tables,
@@ -541,26 +542,35 @@ c -- d
   val ctrlPlus = new KeyCodeCombination(KeyCode.Plus, KeyCombination.ShortcutDown)
   val ctrlMinus = new KeyCodeCombination(KeyCode.Minus, KeyCombination.ShortcutDown)
 
-  val messages = new TextArea() { editable = false }
-  var mcounter: Int = 1
+  class MessagesView() extends javafx.scene.layout.VBox {
 
-  /** Add message text. */
-  def addMessages(text: String): Unit = {
-    if (text.trim != 0) {
-      import java.time._
-      import java.time.format._
-      val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
-        .withZone(ZoneId.systemDefault());
-      val counter = mcounter
-      mcounter = mcounter + 1
-      import java.time._
-      Platform.runLater {
-        messages.appendText(s"\n[$counter]: ${formatter.format(Instant.now)}\n")
-        messages.appendText(text)
-        messages.appendText("\n")
+    val messages = new TextArea() { editable = false }
+    var mcounter: Int = 1
+
+    getChildren() ++= List(new Label("Messages"), messages: Node)
+    
+    /** Add a user message. */
+    def addMessages(text: String): Unit = {
+      if (text.trim != 0) {
+        import java.time._
+        import java.time.format._
+        val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
+          .withZone(ZoneId.systemDefault());
+        val counter = mcounter
+        mcounter = mcounter + 1
+        import java.time._
+        Platform.runLater {
+          messages.appendText(s"\n[$counter]: ${formatter.format(Instant.now)}\n")
+          messages.appendText(text)
+          messages.appendText("\n")
+        }
       }
     }
   }
+  val messagesView = new MessagesView()
+
+  /** Add a user message. */
+  def addMessages(text: String) = messagesView.addMessages(text)
 
   /**
    * Set's the editor's dot source to the string and requests a render.
@@ -670,7 +680,10 @@ c -- d
         }
       }
       center = splitter
-      bottom = messages
+      bottom = messagesView
     }
   }
+
+  scene.getStylesheets += getClass.getResource("/dotfiddle.css").toExternalForm
+  //stage.icons += new javafx.scene.image.Image(getClass.getResource("/dotfiddle.png").toExternalForm)
 }
