@@ -16,3 +16,5 @@ enough to refine the look of a graph quickly.
 
 Run `sbt stage` to generate a package you can run or 
 `sbt universal:packageBin` to generate a distributable zip file.
+
+dotfiddle requires java 1.8 release 40 or above.

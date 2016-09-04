@@ -90,40 +90,32 @@ class DotFiddle extends javafx.application.Application {
     this.stage = stage
     stage.scene = scene
 
-    val text = """// Sample graph
-digraph G {
-
-	subgraph cluster_0 {
-		style=filled;
-		color=lightgrey;
-		node [style=filled,color=white];
-		a0 -> a1 -> a2 -> a3;
-		label = "process #1";
-	}
-
-	subgraph cluster_1 {
-		node [style=filled];
-		b0 -> b1 -> b2 -> b3;
-		label = "process #2";
-		color=blue
-	}
-	start -> a0;
-	start -> b0;
-	a1 -> b3;
-	b2 -> a3;
-	a3 -> a0;
-	a3 -> end;
-	b3 -> end;
-
-	start [shape=Mdiamond];
-	end [shape=Msquare];
-}
-"""
-    setDotSource(text)
-    dotSource = Option(text)
-    Platform.runLater { render() }
+    // Get default graph to show
+    val defaultGraph =
+      nonFatalCatch withApply { ex =>
+        """// place your graph code in graphvz format here
+a -- b
+b -- c
+c -- d 
+}"""
+      } opt {
+        val p = getClass.getResource("/default.gv")
+        scala.io.Source.fromFile(p.toURI()).mkString
+      }
+    setDotSourceAndRender(defaultGraph)
     stage.show
   }
+
+  /**
+   * Get a graph file from the jar file via resources.
+   */
+  protected def getGV(resource: String) =
+    nonFatalCatch withApply { ex =>
+      """// place your graph code in graphvz format here"""
+    } apply {
+      val p = getClass.getResource(resource)
+      scala.io.Source.fromFile(p.toURI()).mkString
+    }
 
   override def stop(): Unit = {
     runner.shutdown()
@@ -258,10 +250,10 @@ digraph G {
           }.showAndWait()
         } else {
           // load the output file
-          reload(Some(outputFile))
+          loadAndDisplaySVG(Some(outputFile))
         }
-        if (stdout.length > 0) addMessages(stdout.toString)
-        if (stderr.length > 0) addMessages(stderr.toString)
+        //if (stdout.length > 0) addMessages(stdout.toString)
+        if (stderr.length > 0) addMessages("Error output from running rendering: " + stderr.toString)
       }
     }
   }
@@ -279,7 +271,7 @@ digraph G {
   /**
    * Reload the SVG file that is output from graphviz rendering.
    */
-  def reload(svg: Option[Path] = None): Unit = {
+  def loadAndDisplaySVG(svg: Option[Path] = None): Unit = {
     svg match {
       case Some(f) if (Files.exists(f) && Files.size(f) > 0) =>
         addMessages(s"Loading SVG: ${f.toAbsolutePath.toString}")
@@ -314,8 +306,8 @@ digraph G {
   /** Get the dot source from the text editor. Should never return null. */
   def getDotSource(): String = editor.getDocument.getText
 
-  /** Set the dot source from the string. */
-  def setDotSource(source: String) = editor.replaceText(0, 0, source)
+  /** Set the editor's dot source from the string. */
+  def setDotSource(source: String) = editor.replaceText(0, editor.getLength, source)
 
   val (slider, sview) = {
     val slider = new Slider(0.1, 5, 0.25) { blockIncrement = 0.25f }
@@ -477,12 +469,12 @@ digraph G {
 
   val splitter = new SplitPane {
     items ++= Seq(
-        commandCenter, 
-        new VBox { 
-          spacing = 10
-          children ++= Seq(sview, zoomer)
-        }: Node,
-        editor)
+      commandCenter,
+      new VBox {
+        spacing = 10
+        children ++= Seq(sview, zoomer)
+      }: Node,
+      editor)
     dividerPositions_=(0.20, 0.70)
   }
 
@@ -512,6 +504,15 @@ digraph G {
   }
 
   /**
+   * Set's the editor's dot source to the string and requests a render.
+   */
+  def setDotSourceAndRender(text: Option[String]): Unit = {
+    setDotSource(text.map(_.trim).filterNot(_.isEmpty).getOrElse(""))
+    dotSource = text
+    render()
+  }
+
+  /**
    *  Load dot file and reset graphics.
    */
   def loadDot(file: Path, stage: Stage): Unit = {
@@ -527,14 +528,13 @@ digraph G {
 
     nonFatalCatch withApply { t =>
       showAlert(file.toAbsolutePath().toString)
-      dotSource = None
+      setDotSourceAndRender(None)
+      stage.title = titlePrefix
     } apply {
       if (Files.exists(file)) {
         val text = scala.io.Source.fromFile(file.toFile).getLines.mkString("\n")
         // load dot content into editor, render once
-        setDotSource(text)
-        dotSource = Option(text)
-        render()
+        setDotSourceAndRender(Some(text))
         stage.title = titlePrefix + " - " + file.getFileName.toString
       }
     }
@@ -550,6 +550,9 @@ digraph G {
   //        image = dotSource, scale = Some(slider.value()))
   //    }
 
+  val examples = Seq("default", "ER", "fsm", "process",
+    "prof", "psg", "softmaint", "unix", "world")
+
   val scene = new Scene(1020, 700) {
     root = new BorderPane {
       top = new VBox { // in case I add a toolbar
@@ -560,6 +563,17 @@ digraph G {
                 loadButton,
                 saveButton,
                 saveAsButton,
+                new SeparatorMenuItem(),
+                new Menu("Loa_d Examples") {
+                  items = examples.map { f =>
+                    new MenuItem(f) {
+                      onAction = { _ =>
+                        val gv = getGV("/" + f + ".gv")
+                        setDotSourceAndRender(Some(gv))
+                      }
+                    }
+                  }
+                },
                 new SeparatorMenuItem(),
                 exitButton)
             },
